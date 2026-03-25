@@ -1,22 +1,22 @@
 using CqrsProductApi.Data;
+using CqrsProductApi.Entities;
 using CqrsProductApi.Features.Products.Commands.CreateProduct;
 using CqrsProductApi.Features.Products.Commands.DeleteProduct;
 using CqrsProductApi.Features.Products.Queries.GetAllProducts;
 using CqrsProductApi.Features.Products.Queries.GetProductById;
-using CqrsProductApi.Repositories;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Validation.AspNetCore;
 using OpenIddict.Abstractions;
-using OpenIddict.Server;
-using OpenIddict.Server.AspNetCore;
 using Microsoft.OpenApi.Models;
-using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
+// Swagger (Token almak için yaptım)
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
@@ -24,10 +24,6 @@ builder.Services.AddSwaggerGen(options =>
         Type = SecuritySchemeType.OAuth2,
         Flows = new OpenApiOAuthFlows
         {
-            ClientCredentials = new OpenApiOAuthFlow
-            {
-                TokenUrl = new Uri("/connect/token", UriKind.Relative)
-            },
             Password = new OpenApiOAuthFlow
             {
                 TokenUrl = new Uri("/connect/token", UriKind.Relative)
@@ -49,9 +45,19 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseSqlite(builder.Configuration.GetConnectionString("SqlServer"));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
     options.UseOpenIddict();
 });
+
+builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
+{
+    options.Password.RequireDigit = true;
+    options.Password.RequiredLength = 6;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequireUppercase = false;
+})
+.AddEntityFrameworkStores<AppDbContext>() // Identity tablolarını AppDbContext'e bağlar
+.AddDefaultTokenProviders();
 
 builder.Services.AddOpenIddict()
     .AddCore(opt =>
@@ -76,10 +82,14 @@ builder.Services.AddOpenIddict()
         opt.UseAspNetCore();
     });
 
-builder.Services.AddAuthentication(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+});
 builder.Services.AddAuthorization();
 
-builder.Services.AddScoped<IProductRepository, ProductRepository>();
+
 builder.Services.AddScoped<CreateProductCommandHandler>();
 builder.Services.AddScoped<DeleteProductCommandHandler>();
 builder.Services.AddScoped<GetAllProductsQueryHandler>();
@@ -93,17 +103,16 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
-
+app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+
 using (var scope = app.Services.CreateScope())
 {
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
     var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
 
     var client = await manager.FindByClientIdAsync("test-client");

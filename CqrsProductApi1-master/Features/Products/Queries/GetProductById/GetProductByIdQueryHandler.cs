@@ -1,28 +1,15 @@
-﻿using CqrsProductApi.Features.Products.Dtos;
-using CqrsProductApi.Repositories;
+﻿using CqrsProductApi.Data;
+using CqrsProductApi.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace CqrsProductApi.Features.Products.Queries.GetProductById;
 
 public class GetProductByIdQueryHandler
 {
-    private readonly IProductRepository _repo;
+    private readonly AppDbContext _context;
 
-    public GetProductByIdQueryHandler(IProductRepository repo)
-    {
-        _repo = repo;
-    }
+    public GetProductByIdQueryHandler(AppDbContext context) => _context = context;
 
-    public async Task<ProductDto?> Handle(GetProductByIdQuery query)
-    {
-        var product = await _repo.GetByIdAsync(query.Id);
-        if (product == null) return null;
-
-        return new ProductDto
-        {
-            Id = product.Id,
-            Name = product.Name,
-            Price = product.Price,
-            CreatedAt = product.CreatedAt
-        };
-    }
+    public async Task<Product?> Handle(GetProductByIdQuery query)
+        => await _context.Products.FirstOrDefaultAsync(x => x.Id == query.Id);
 }

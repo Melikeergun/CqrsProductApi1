@@ -1,24 +1,20 @@
-﻿using CqrsProductApi.Repositories;
+﻿using CqrsProductApi.Data;
 
 namespace CqrsProductApi.Features.Products.Commands.DeleteProduct;
 
 public class DeleteProductCommandHandler
 {
-    private readonly IProductRepository _repo;
+    private readonly AppDbContext _context;
 
-    public DeleteProductCommandHandler(IProductRepository repo)
-    {
-        _repo = repo;
-    }
+    public DeleteProductCommandHandler(AppDbContext context) => _context = context;
 
     public async Task<bool> Handle(DeleteProductCommand command)
     {
-        var product = await _repo.GetByIdAsync(command.Id);
+        var product = await _context.Products.FindAsync(command.Id);
         if (product == null) return false;
 
-        _repo.Delete(product);
-        await _repo.SaveChangesAsync();
-
+        _context.Products.Remove(product);
+        await _context.SaveChangesAsync();
         return true;
     }
 }

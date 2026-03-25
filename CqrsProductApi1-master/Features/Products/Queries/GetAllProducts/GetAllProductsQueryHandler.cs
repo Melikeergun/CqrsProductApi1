@@ -1,27 +1,15 @@
-﻿using CqrsProductApi.Features.Products.Dtos;
-using CqrsProductApi.Repositories;
+﻿using CqrsProductApi.Data;
+using CqrsProductApi.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace CqrsProductApi.Features.Products.Queries.GetAllProducts;
 
 public class GetAllProductsQueryHandler
 {
-    private readonly IProductRepository _repo;
+    private readonly AppDbContext _context;
 
-    public GetAllProductsQueryHandler(IProductRepository repo)
-    {
-        _repo = repo;
-    }
+    public GetAllProductsQueryHandler(AppDbContext context) => _context = context;
 
-    public async Task<List<ProductDto>> Handle(GetAllProductsQuery query)
-    {
-        var products = await _repo.GetAllAsync();
-
-        return products.Select(x => new ProductDto
-        {
-            Id = x.Id,
-            Name = x.Name,
-            Price = x.Price,
-            CreatedAt = x.CreatedAt
-        }).ToList();
-    }
+    public async Task<List<Product>> Handle(GetAllProductsQuery query)
+        => await _context.Products.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync();
 }
