@@ -27,7 +27,7 @@ public class AuthorizationController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        var userExists = await _userManager.FindByEmailAsync(request.Email);
+        var userExists = await _userManager.FindByEmailAsync(request.Email ?? string.Empty);
         if (userExists != null)
             return BadRequest("Bu e-posta adresi zaten kayıtlı.");
 
@@ -38,7 +38,7 @@ public class AuthorizationController : ControllerBase
             FullName = request.FullName
         };
 
-        var result = await _userManager.CreateAsync(user, request.Password);
+        var result = await _userManager.CreateAsync(user, request.Password ?? string.Empty);
 
         if (!result.Succeeded)
             return BadRequest(result.Errors.Select(e => e.Description));

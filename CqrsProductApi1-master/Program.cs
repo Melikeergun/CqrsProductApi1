@@ -4,21 +4,39 @@ using CqrsProductApi.Features.Products.Commands.CreateProduct;
 using CqrsProductApi.Features.Products.Commands.DeleteProduct;
 using CqrsProductApi.Features.Products.Queries.GetAllProducts;
 using CqrsProductApi.Features.Products.Queries.GetProductById;
+using FastEndpoints;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using OpenIddict.Validation.AspNetCore;
-using OpenIddict.Abstractions;
 using Microsoft.OpenApi.Models;
+using OpenIddict.Abstractions;
+using OpenIddict.Validation.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
 builder.Services.AddControllers();
+builder.Services.AddFastEndpoints();
+builder.Services.AddHttpClient();
 builder.Services.AddEndpointsApiExplorer();
 
-// Swagger (Token almak için yaptım)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 builder.Services.AddSwaggerGen(options =>
 {
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "CqrsProductApi",
+        Version = "v1"
+    });
+
     options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
     {
         Type = SecuritySchemeType.OAuth2,
@@ -36,59 +54,81 @@ builder.Services.AddSwaggerGen(options =>
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "oauth2" }
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "oauth2"
+                }
             },
-            new List<string>()
+            Array.Empty<string>()
         }
     });
 });
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"));
+
     options.UseOpenIddict();
 });
 
+// Identity alan�m
 builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 {
     options.Password.RequireDigit = true;
     options.Password.RequiredLength = 6;
     options.Password.RequireNonAlphanumeric = false;
     options.Password.RequireUppercase = false;
+    options.Password.RequireLowercase = false;
+    options.User.RequireUniqueEmail = true;
 })
-.AddEntityFrameworkStores<AppDbContext>() // Identity tablolarını AppDbContext'e bağlar
+.AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
+// OpenIddict alan�m
 builder.Services.AddOpenIddict()
-    .AddCore(opt =>
+    .AddCore(options =>
     {
-        opt.UseEntityFrameworkCore().UseDbContext<AppDbContext>();
+        options.UseEntityFrameworkCore()
+               .UseDbContext<AppDbContext>();
     })
-    .AddServer(opt =>
+    .AddServer(options =>
     {
-        opt.SetTokenEndpointUris("connect/token");
-        opt.AllowPasswordFlow();
-        opt.AllowClientCredentialsFlow();
-        opt.DisableAccessTokenEncryption();
-        opt.AddDevelopmentEncryptionCertificate()
-           .AddDevelopmentSigningCertificate();
-        opt.UseAspNetCore()
-           .EnableTokenEndpointPassthrough()
-           .DisableTransportSecurityRequirement();
+        options.SetTokenEndpointUris("/connect/token");
+
+        options.AllowPasswordFlow();
+        options.AllowClientCredentialsFlow();
+
+        options.AcceptAnonymousClients();
+
+        options.DisableAccessTokenEncryption();
+
+        options.AddDevelopmentEncryptionCertificate();
+        options.AddDevelopmentSigningCertificate();
+
+        options.RegisterScopes("api");
+
+        options.UseAspNetCore()
+               .EnableTokenEndpointPassthrough();
     })
-    .AddValidation(opt =>
+    .AddValidation(options =>
     {
-        opt.UseLocalServer();
-        opt.UseAspNetCore();
+        options.UseLocalServer();
+        options.UseAspNetCore();
     });
+
 
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
-});
-builder.Services.AddAuthorization();
+    options.DefaultAuthenticateScheme =
+        OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
 
+    options.DefaultChallengeScheme =
+        OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+});
+
+builder.Services.AddAuthorization();
 
 builder.Services.AddScoped<CreateProductCommandHandler>();
 builder.Services.AddScoped<DeleteProductCommandHandler>();
@@ -104,20 +144,27 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors("AllowAll");
+
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseFastEndpoints();
 app.MapControllers();
 
 
 using (var scope = app.Services.CreateScope())
 {
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var manager = scope.ServiceProvider
+        .GetRequiredService<IOpenIddictApplicationManager>();
 
-    var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+    const string clientId = "test-client";
 
-    var client = await manager.FindByClientIdAsync("test-client");
-    if (client != null)
-        await manager.DeleteAsync(client);
+    var existingClient = await manager.FindByClientIdAsync(clientId);
+
+    if (existingClient is not null)
+        await manager.DeleteAsync(existingClient);
 
     await manager.CreateAsync(new OpenIddictApplicationDescriptor
     {
@@ -127,10 +174,9 @@ using (var scope = app.Services.CreateScope())
         Permissions =
         {
             OpenIddictConstants.Permissions.Endpoints.Token,
-            OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
             OpenIddictConstants.Permissions.GrantTypes.Password,
-            OpenIddictConstants.Permissions.Prefixes.Scope + "api",
-            OpenIddictConstants.Permissions.ResponseTypes.Token
+            OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
+            OpenIddictConstants.Permissions.Prefixes.Scope + "api"
         }
     });
 }
