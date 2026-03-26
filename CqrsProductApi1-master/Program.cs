@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using OpenIddict.Abstractions;
 using OpenIddict.Validation.AspNetCore;
+using CqrsProductApi1.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -135,6 +136,7 @@ builder.Services.AddScoped<DeleteProductCommandHandler>();
 builder.Services.AddScoped<GetAllProductsQueryHandler>();
 builder.Services.AddScoped<GetProductByIdQueryHandler>();
 
+builder.Services.AddEndpoints(typeof(Program).Assembly);  //bu extension ile projemdeki tüm enpointeri otomatik olarak taramýþ oldum ve ekledim
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -180,5 +182,5 @@ using (var scope = app.Services.CreateScope())
         }
     });
 }
-
+app.MapEndpoints();
 app.Run();
